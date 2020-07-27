@@ -19,23 +19,33 @@ final ThemeData kDefaultTheme = ThemeData(
   accentColor: Colors.orangeAccent[400],
 );
 
-final googleSingIn = GoogleSignIn();
+final googleSignIn = GoogleSignIn();
 final auth = FirebaseAuth.instance;
 
 Future<Null> _ensureLoggedIn() async {
-  GoogleSignInAccount user = googleSingIn.currentUser;
-  if (user == null) {
-    user = await googleSingIn.signInSilently();
-  }
-  if (user == null) {
-    user = await googleSingIn.signIn();
-  }
-  if (await auth.currentUser() == null) {
-    GoogleSignInAuthentication credentials =
-        await googleSingIn.currentUser.authentication;
+  GoogleSignInAccount user = googleSignIn.currentUser;
+  if(user == null)
+    user = await googleSignIn.signInSilently();
+  if(user == null)
+    user = await googleSignIn.signIn();
+  if(await auth.currentUser() == null){
+    GoogleSignInAuthentication credentials = await googleSignIn.currentUser.authentication;
     await auth.signInWithCredential(GoogleAuthProvider.getCredential(
         idToken: credentials.idToken, accessToken: credentials.accessToken));
   }
+}
+_handleSubmitted(String text) async {
+  await _ensureLoggedIn();
+  _sendMessage(text: text);
+}
+
+void _sendMessage({String text, String imgUrl}) {
+  Firestore.instance.collection("messages").add({
+    "text": text,
+    "imgUrl": imgUrl,
+    "senderName": googleSignIn.currentUser.displayName,
+    "senderPhotoUrl": googleSignIn.currentUser.photoUrl
+  });
 }
 
 class MyApp extends StatelessWidget {
@@ -103,7 +113,15 @@ class TextComposer extends StatefulWidget {
 }
 
 class _TextComposerState extends State<TextComposer> {
+  final _textController = TextEditingController();
   bool _isCompoosing = false;
+
+  void _reset() {
+    _textController.clear();
+    setState(() {
+      _isCompoosing = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -125,12 +143,17 @@ class _TextComposerState extends State<TextComposer> {
             ),
             Expanded(
               child: TextField(
+                controller: _textController,
                 decoration:
                     InputDecoration.collapsed(hintText: "Enviar uma mensagem"),
                 onChanged: (text) {
                   setState(() {
                     _isCompoosing = text.length > 0;
                   });
+                },
+                onSubmitted: (text) {
+                  _handleSubmitted(text);
+                   _reset();
                 },
               ),
             ),
@@ -139,10 +162,20 @@ class _TextComposerState extends State<TextComposer> {
               child: Theme.of(context).platform == TargetPlatform.iOS
                   ? CupertinoButton(
                       child: Text("Enviar"),
-                      onPressed: _isCompoosing ? () {} : null)
+                      onPressed: _isCompoosing
+                          ? () {
+                              _handleSubmitted(_textController.text);
+                              _reset();
+                            }
+                          : null)
                   : IconButton(
                       icon: Icon(Icons.send),
-                      onPressed: _isCompoosing ? () {} : null),
+                      onPressed: _isCompoosing
+                          ? () {
+                              _handleSubmitted(_textController.text);
+                              _reset();
+                            }
+                          : null),
             )
           ],
         ),
