@@ -15,6 +15,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "286143131160-ttibikooumkp7e5ua812tuki0r5pgur3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "br.com.rocketup.chat_online",
+            "certificate_hash": "4e49a6819c9c78d28766301da4bec94c31142571"
+          }
+        },
+        {
           "client_id": "286143131160-vffl59nbc75ppuoqisprdg0ufmj32vh1.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
