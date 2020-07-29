@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:image_picker/image_picker.dart';
 
 void main() {
   runApp(MyApp());
@@ -24,16 +28,16 @@ final auth = FirebaseAuth.instance;
 
 Future<Null> _ensureLoggedIn() async {
   GoogleSignInAccount user = googleSignIn.currentUser;
-  if(user == null)
-    user = await googleSignIn.signInSilently();
-  if(user == null)
-    user = await googleSignIn.signIn();
-  if(await auth.currentUser() == null){
-    GoogleSignInAuthentication credentials = await googleSignIn.currentUser.authentication;
+  if (user == null) user = await googleSignIn.signInSilently();
+  if (user == null) user = await googleSignIn.signIn();
+  if (await auth.currentUser() == null) {
+    GoogleSignInAuthentication credentials =
+        await googleSignIn.currentUser.authentication;
     await auth.signInWithCredential(GoogleAuthProvider.getCredential(
         idToken: credentials.idToken, accessToken: credentials.accessToken));
   }
 }
+
 _handleSubmitted(String text) async {
   await _ensureLoggedIn();
   _sendMessage(text: text);
@@ -83,13 +87,26 @@ class _ChatScreenState extends State<ChatScreen> {
         body: Column(
           children: <Widget>[
             Expanded(
-              child: ListView(
-                children: <Widget>[
-                  ChatMessage(),
-                  ChatMessage(),
-                  ChatMessage(),
-                ],
-              ),
+              child: StreamBuilder(
+                  stream: Firestore.instance.collection("messages").snapshots(),
+                  builder: (context, snapshot) {
+                    switch (snapshot.connectionState) {
+                      case ConnectionState.none:
+                      case ConnectionState.waiting:
+                        return Center(
+                          child: CircularProgressIndicator(),
+                        );
+                      default:
+                        return ListView.builder(
+                            reverse: true,
+                            itemCount: snapshot.data.documents.length,
+                            itemBuilder: (context, index) {
+                              List r =
+                                  snapshot.data.documents.reversed.toList();
+                              return ChatMessage(r[index].data);
+                            });
+                    }
+                  }),
             ),
             Divider(
               height: 1.0,
@@ -138,7 +155,20 @@ class _TextComposerState extends State<TextComposer> {
             Container(
               child: IconButton(
                 icon: Icon(Icons.photo_camera),
-                onPressed: () {},
+                onPressed: () async {
+                  await _ensureLoggedIn();
+                  File imgFile =
+                      await ImagePicker.pickImage(source: ImageSource.camera);
+                  if (imgFile == null) return;
+                  StorageUploadTask task = FirebaseStorage.instance
+                      .ref()
+                      .child(googleSignIn.currentUser.id.toString() +
+                          DateTime.now().millisecondsSinceEpoch.toString())
+                      .putFile(imgFile);
+                  StorageTaskSnapshot taskSnapshot = await task.onComplete;
+                  String url = await taskSnapshot.ref.getDownloadURL();
+                  _sendMessage(imgUrl: url);
+                },
               ),
             ),
             Expanded(
@@ -153,7 +183,7 @@ class _TextComposerState extends State<TextComposer> {
                 },
                 onSubmitted: (text) {
                   _handleSubmitted(text);
-                   _reset();
+                  _reset();
                 },
               ),
             ),
@@ -185,6 +215,10 @@ class _TextComposerState extends State<TextComposer> {
 }
 
 class ChatMessage extends StatelessWidget {
+  final Map<String, dynamic> data;
+
+  ChatMessage(this.data);
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -195,8 +229,7 @@ class ChatMessage extends StatelessWidget {
           Container(
             margin: const EdgeInsets.only(right: 16.0),
             child: CircleAvatar(
-              backgroundImage: NetworkImage(
-                  "https://img.ibxk.com.br/2019/07/26/26000559344397.jpg?w=1120&h=420&mode=crop&scale=both"),
+              backgroundImage: NetworkImage(data["senderPhotoUrl"]),
             ),
           ),
           Expanded(
@@ -204,13 +237,17 @@ class ChatMessage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  "Leonardo",
+                  data["senderName"],
                   style: Theme.of(context).textTheme.subhead,
                 ),
                 Container(
-                  margin: const EdgeInsets.only(top: 5.0),
-                  child: Text("teste"),
-                )
+                    margin: const EdgeInsets.only(top: 5.0),
+                    child: data["imgUrl"] != null
+                        ? Image.network(
+                            data["imgUrl"],
+                            width: 250.0,
+                          )
+                        : Text(data["text"]))
               ],
             ),
           )
